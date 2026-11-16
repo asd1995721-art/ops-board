@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="googlebot" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<title>採購追蹤儀表板</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <h1>採購追蹤儀表板</h1>
+      <p class="asof" id="asof">讀取資料中…</p>
+    </div>
+    <nav class="tabs" aria-label="主要分頁">
+      <a href="#home" data-view="home">今日行動</a>
+      <a href="#pool" data-view="pool">案件池</a>
+      <a href="#charts" data-view="charts">情報圖表</a>
+    </nav>
+  </div>
+  <div id="coverage" class="coverage" hidden>⚠ 本輪查核仍有缺口：部分來源未完成，數字可能偏少。</div>
+</header>
+
+<main id="main">
+  <p id="loadmsg" class="loadmsg">讀取資料中…</p>
+  <section id="view-home" class="view" hidden></section>
+  <section id="view-pool" class="view" hidden></section>
+  <section id="view-charts" class="view" hidden></section>
+</main>
+
+<div id="overlay" class="overlay" hidden></div>
+<aside id="drawer" class="drawer" hidden aria-modal="true" role="dialog" aria-labelledby="drawer-title" tabindex="-1"></aside>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
