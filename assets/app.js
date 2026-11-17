@@ -25,6 +25,13 @@
   var REL = { inquiry_of: '對應的徵求案', tender_of: '對應的正式招標', retender_of: '前次流標或廢標' };
   var VERIFY = { official: ['已核', 'v-ok'], local: ['待核', 'v-warn'], guess: ['推測', 'v-guess'] };
   var STUCK_DAYS = { quoting: 5, interested: 7, preparing: 7, submitted: 7 };
+  var FIELD_LABEL = {
+    deadline: '截止日', budget: '預算', notice_version: '公告版本', version: '公告版本', published_at: '公告日', title: '案名',
+    notice_type: '公告類型', attachments: '附件', opening_at: '開標日', agency: '機關', case_no: '案號', bucket: '狀態',
+    category: '類別', quantity: '數量', key_spec: '主要規範', origin_limit: '產地限制', qualification: '投標資格',
+    result_kind: '結果類型', result_text: '結果說明', failed_count: '流標次數', retender: '續招', source_url: '來源連結'
+  };
+  var HEALTH = { red: ['失敗', 'b-red'], yellow: ['偏少', 'b-amber'] };
   var H = 3600 * 1000, D = 24 * H;
 
   var DATA = null, ALL = [], ACTIVE = [], EXCLUDED = [], NOW = new Date();
@@ -88,6 +95,19 @@
     if (ms <= 7 * D) return { text: t, cls: 'soon', badge: '7天內' };
     return { text: t, cls: '' };
   }
+  function changeTags(c) {
+    if (c.change_flag === 'new') return [h('span', { class: 'badge b-blue' }, '新')];
+    if (c.change_flag === 'new_backlog') return [h('span', { class: 'badge b-gray' }, '新納入')];
+    if (c.change_flag === 'changed') {
+      var f = Array.isArray(c.changed_fields) ? c.changed_fields.filter(Boolean) : [];
+      var names = f.map(function (k) { return FIELD_LABEL[k] || String(k); })
+        .filter(function (n, i, arr) { return arr.indexOf(n) === i; });
+      return [h('span', { class: 'badge b-violet' }, '變更' + (names.length ? '：' + names.join('、') : ''))];
+    }
+    return [];
+  }
+  // 首頁只顯示招標中、公開徵求，以及看板上有進度階段的案件
+  function onHome(c) { return c.bucket === 'tender' || c.bucket === 'inquiry' || !!c.stage; }
   function isOpenNow(c) { return (c.bucket === 'tender' || c.bucket === 'inquiry') && c._dl && c._dl > NOW; }
   function vtag(c, field) {
     var v = c.verify && c.verify[field];
@@ -155,7 +175,7 @@
     (extra || []).forEach(function (b) { badges.push(b); });
     return h('button', { type: 'button', class: 'card ' + r.cls, onclick: function () { openCase(c); } },
       h('div', { class: 'row1' }, h('span', { class: 'no' }, txt(c.case_no, '案號未載')), badges),
-      h('div', { class: 'title' }, caseName(c)),
+      h('div', { class: 'title' }, caseName(c), changeTags(c).map(function (b) { return [' ', b]; })),
       h('div', { class: 'agency' }, txt(c.agency, '機關未載')),
       h('div', { class: 'row3' }, h('span', null, moneyShort(c.budget)), h('span', { class: 'remain' }, r.text))
     );
@@ -181,13 +201,42 @@
 
   // ---------- 首頁 ----------
   function newCases() {
-    var asof = pd(DATA.data_as_of);
-    if (!asof) return [];
-    var k0 = dayKey(asof), k1 = dayKey(new Date(asof.getTime() - D));
-    return ACTIVE.filter(function (c) {
-      var k = dayKey(c._pub);
-      return (k === k0 || k === k1) && (c.bucket === 'tender' || c.bucket === 'inquiry');
-    }).sort(byDeadline);
+    // new 在前、new_backlog 在後，各自依截止時間排序；首頁只列招標中、公開徵求或有進度階段者
+    return ACTIVE.filter(function (c) { return (c.change_flag === 'new' || c.change_flag === 'new_backlog') && onHome(c); })
+      .sort(function (a, b) {
+        var fa = a.change_flag === 'new' ? 0 : 1, fb = b.change_flag === 'new' ? 0 : 1;
+        return fa - fb || byDeadline(a, b);
+      });
+  }
+
+  function healthBlock() {
+    var list = Array.isArray(DATA.source_health) ? DATA.source_health.filter(Boolean) : [];
+    var bad = list.filter(function (x) { return x.level === 'red' || x.level === 'yellow'; })
+      .sort(function (a, b) { return (a.level === 'red' ? 0 : 1) - (b.level === 'red' ? 0 : 1); });
+    var building = list.filter(function (x) { return x.level === 'building'; }).length;
+    var buildNote = building ? h('span', { class: 'note' }, '　另有 ' + building + ' 個入口建立基準中') : null;
+    if (!bad.length) {
+      if (!list.length) return null;
+      return h('p', { class: 'health-ok' }, h('span', { class: 'badge b-green' }, '正常'), ' 各查詢入口正常', buildNote);
+    }
+    var nRed = bad.filter(function (x) { return x.level === 'red'; }).length, nYel = bad.length - nRed;
+    function num(v) { return (typeof v === 'number' && isFinite(v)) ? v.toLocaleString('zh-TW') : '—'; }
+    return h('div', { class: 'health ' + (nRed ? 'is-red' : 'is-yellow'), role: 'alert' },
+      h('div', { class: 'panel-head' },
+        h('h2', null, '⚠ 查詢入口異常：失敗 ' + nRed + ' 個、偏少 ' + nYel + ' 個'), buildNote),
+      h('table', { class: 'list health-table' },
+        h('thead', null, h('tr', null, h('th', null, '狀態'), h('th', null, '來源'), h('th', null, '輪次'),
+          h('th', { class: 'num' }, '今日筆數'), h('th', { class: 'num' }, '平常筆數'), h('th', null, '原因'))),
+        h('tbody', null, bad.map(function (x) {
+          var m = HEALTH[x.level];
+          return h('tr', null,
+            h('td', { 'data-label': '狀態', class: 'nowrap' }, h('span', { class: 'badge ' + m[1] }, m[0])),
+            h('td', { 'data-label': '來源' }, txt(x.source, '來源未載')),
+            h('td', { 'data-label': '輪次', class: 'nowrap' }, txt(x.round, '—')),
+            h('td', { 'data-label': '今日筆數', class: 'num' }, num(x.today)),
+            h('td', { 'data-label': '平常筆數', class: 'num' }, num(x.baseline)),
+            h('td', { 'data-label': '原因' }, txt(x.reason, '—')));
+        }))));
   }
   function byDeadline(a, b) {
     if (a._dl && b._dl) return a._dl - b._dl;
@@ -201,6 +250,7 @@
     var open = ACTIVE.filter(isOpenNow).sort(byDeadline);
     var in48 = open.filter(function (c) { return c._dl - NOW <= 48 * H; });
     var nw = newCases();
+    var newCount = ACTIVE.filter(function (c) { return c.change_flag === 'new'; }).length;
     var prep = ACTIVE.filter(function (c) { return c.stage === 'preparing'; });
     var subm = ACTIVE.filter(function (c) { return c.stage === 'submitted' || c.stage === 'awaiting'; });
     var q = DATA.quota || {};
@@ -212,15 +262,17 @@
     }
     var quotaVal = (q.remaining != null) ? String(q.remaining) : '—';
     var quotaSub = (q.limit != null) ? ' / ' + q.limit : ' / 未載';
+    var hb = healthBlock();
+    if (hb) root.append(hb);
     root.append(h('div', { class: 'stats' },
       stat('48 小時內截標', String(in48.length), ' 件', in48.length > 0),
-      stat('新案件（近兩日公告）', String(nw.length), ' 件'),
+      stat('本輪新案件', String(newCount), ' 件'),
       stat('備標中', String(prep.length), ' 件'),
       stat('已投標與待開標', String(subm.length), ' 件'),
       stat('閱覽額度剩餘' + (q.month ? '（' + q.month + '）' : ''), quotaVal, quotaSub)
     ));
 
-    var i2t = ACTIVE.filter(function (c) { return c.inquiry_to_tender === true; });
+    var i2t = ACTIVE.filter(function (c) { return c.inquiry_to_tender === true && onHome(c); });
     if (i2t.length) {
       root.append(h('div', { class: 'banner', role: 'alert' },
         h('h2', null, '最高優先：已關注的徵求案已正式招標（' + i2t.length + ' 件）'),
@@ -236,12 +288,12 @@
         foldList(open, 10, function (c) { return c.deadline_time_default ? [h('span', { class: 'badge b-gray' }, '預設17:00')] : null; }, '目前沒有未截止的案件')),
       h('div', { class: 'panel' },
         h('div', { class: 'panel-head' }, h('h3', null, '新案（' + nw.length + ' 件）'),
-          h('span', { class: 'note' }, '公告日為資料截至日或前一日')),
+          h('span', { class: 'note' }, '本輪新公告在前，其次為本輪新納入的舊公告')),
         cardList(nw, function (c) {
           var b = [h('span', { class: 'badge b-blue' }, bucketLabel(c.bucket))];
           if (c.bucket === 'tender' && c.failed_count > 0) b.push(h('span', { class: 'badge b-amber' }, '流標續招'));
           return b;
-        }, '近兩日沒有新公告的招標中或公開徵求案件'))
+        }, '本輪沒有新出現或新納入的招標中、公開徵求案件'))
     );
 
     // 右欄：看板
@@ -283,7 +335,7 @@
     }
     var idx = {};
     days.forEach(function (x, i) { idx[x.k] = i; });
-    ACTIVE.forEach(function (c) {
+    ACTIVE.filter(onHome).forEach(function (c) {
       var kd = dayKey(c._dl), ko = dayKey(c._open);
       if (kd in idx && c._dl >= start) days[idx[kd]].dead.push(c);
       if (ko in idx && c._open >= start) days[idx[ko]].open.push(c);
@@ -435,7 +487,7 @@
           r.badge && isOpenNow(c) ? h('div', null, h('span', { class: 'badge ' + (r.cls === 'urgent' ? 'b-red' : 'b-amber') }, r.badge)) : null] : '無截止資料';
         var tr = h('tr', { onclick: function () { openCase(c); } },
           h('td', { 'data-label': '案號', class: 'mono nowrap' }, h('button', { type: 'button', class: 'linkbtn', onclick: function (e) { e.stopPropagation(); openCase(c); } }, txt(c.case_no, '案號未載'))),
-          h('td', { 'data-label': '案名' }, caseName(c), c.failed_count > 0 ? [' ', h('span', { class: 'badge b-amber' }, '流標 ' + c.failed_count + ' 次')] : null),
+          h('td', { 'data-label': '案名' }, caseName(c), changeTags(c).map(function (b) { return [' ', b]; }), c.failed_count > 0 ? [' ', h('span', { class: 'badge b-amber' }, '流標 ' + c.failed_count + ' 次')] : null),
           h('td', { 'data-label': '機關' }, txt(c.agency, '機關未載')),
           h('td', { 'data-label': '類別', class: 'nowrap' }, catLabel(c.category)),
           h('td', { 'data-label': '預算', class: 'num' }, money(c.budget) || '未公告'),
@@ -569,6 +621,13 @@
       kv('狀態', bucketLabel(c.bucket), vtag(c, 'bucket')),
       kv('類別', catLabel(c.category), vtag(c, 'category')),
       c.excluded ? kv('排除原因', c.exclude_reason ? (EXCL[c.exclude_reason] || c.exclude_reason) : none('原因未載'), vtag(c, 'exclude_reason')) : null)));
+
+    var firstSeen = pd(c.first_seen_at), lastChg = pd(c.last_changed_at);
+    if (firstSeen || lastChg) {
+      sec.push(h('section', { class: 'seen' }, h('dl', { class: 'kv' },
+        firstSeen ? kv('首次看到', fmtDT(firstSeen)) : null,
+        lastChg ? kv('最後變動', fmtDT(lastChg), changeTags(c).map(function (b) { return [' ', b]; })) : null)));
+    }
 
     sec.push(h('section', null, h('h3', null, '初篩摘要'), h('dl', { class: 'kv' },
       kv('數量', txt(c.quantity, '') || none('未查'), vtag(c, 'quantity')),
