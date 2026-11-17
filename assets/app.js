@@ -469,97 +469,9 @@
   function renderCharts() {
     var root = document.getElementById('view-charts');
     root.append(h('div', { class: 'charts-grid' },
-      h('div', { class: 'panel wide' }, heatmap()),
-      h('div', { class: 'panel wide' }, trend()),
       h('div', { class: 'panel' }, failedView()),
       h('div', { class: 'panel' }, stageStats())
     ));
-  }
-
-  function heatmap() {
-    var agCount = {};
-    ACTIVE.forEach(function (c) { if (c.agency) agCount[c.agency] = (agCount[c.agency] || 0) + 1; });
-    var top = Object.keys(agCount).sort(function (a, b) { return agCount[b] - agCount[a] || a.localeCompare(b, 'zh-Hant'); }).slice(0, 12);
-    var cells = {}, maxB = 0, maxN = 0;
-    top.forEach(function (a) {
-      cells[a] = {};
-      CAT_ORDER.forEach(function (k) {
-        var list = ACTIVE.filter(function (c) { return c.agency === a && (c.category || null) === k; });
-        var b = budgetSum(list);
-        cells[a][k] = { n: list.length, b: b };
-        if (b > maxB) maxB = b;
-        if (list.length > maxN) maxN = list.length;
-      });
-    });
-    var rows = top.map(function (a) {
-      return h('tr', null, h('th', { class: 'ag', scope: 'row' }, a, h('span', { class: 'dim' }, '（' + agCount[a] + '）')),
-        CAT_ORDER.map(function (k) {
-          var x = cells[a][k];
-          if (!x.n) return h('td', { class: 'zero' }, '0');
-          var byCount = x.b <= 0;
-          var alpha = byCount ? 0.12 + 0.6 * (x.n / maxN) : 0.15 + 0.8 * Math.sqrt(x.b / maxB);
-          var td = h('td', { class: alpha > 0.55 ? 'dk' : null, title: a + '・' + catLabel(k) + '：' + x.n + ' 件，' + (byCount ? '預算全未公告' : '已公告預算 ' + money(x.b)) },
-            x.n + (byCount ? '＊' : ''), h('small', null, byCount ? '預算未公告' : moneyShort(x.b)));
-          td.style.setProperty('--a', alpha.toFixed(3));
-          return td;
-        }));
-    });
-    return [
-      h('div', { class: 'panel-head' }, h('h2', null, '機關 × 類別熱力圖'),
-        h('span', { class: 'note' }, '案件數前 12 名機關。格內為件數與已公告預算合計；顏色深淺依已公告預算合計（僅計已公告預算），標「＊」者預算全未公告，深淺改依件數。')),
-      top.length ? h('div', { class: 'heat-wrap' }, h('table', { class: 'heat' },
-        h('thead', null, h('tr', null, h('th', { class: 'ag' }, '機關（件數）'), CAT_ORDER.map(function (k) { return h('th', null, catLabel(k)); }))),
-        h('tbody', null, rows))) : h('p', { class: 'empty' }, '沒有資料')
-    ];
-  }
-
-  function barChart(months, vals, fmtVal, cls, title) {
-    var W = 1000, HH = 200, L = 20, R = 20, T = 24, B = 30;
-    var max = Math.max.apply(null, vals.concat([0]));
-    var bw = (W - L - R) / months.length;
-    var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + HH, role: 'img', 'aria-label': title });
-    svg.append(s('line', { x1: L, x2: W - R, y1: HH - B, y2: HH - B, class: 'c-axis' }));
-    months.forEach(function (m, i) {
-      var v = vals[i], x = L + bw * i;
-      var bh = max > 0 ? (HH - T - B) * v / max : 0;
-      var g = s('g');
-      g.append(s('title', null, m + '：' + fmtVal(v)));
-      if (v > 0) g.append(s('rect', { x: x + bw * 0.18, y: HH - B - bh, width: bw * 0.64, height: Math.max(bh, 1), rx: 2, class: cls }));
-      g.append(s('text', { x: x + bw / 2, y: HH - B - bh - 6, 'text-anchor': 'middle', class: 'c-val' }, fmtVal(v)));
-      g.append(s('text', { x: x + bw / 2, y: HH - 10, 'text-anchor': 'middle', class: 'c-label' }, m));
-      svg.append(g);
-    });
-    return svg;
-  }
-
-  function trend() {
-    var asof = pd(DATA.data_as_of) || NOW;
-    var k = dayKey(asof), y = +k.slice(0, 4), mo = +k.slice(5, 7);
-    var months = [];
-    for (var i = 11; i >= 0; i--) {
-      var mm = mo - i, yy = y;
-      while (mm <= 0) { mm += 12; yy -= 1; }
-      months.push(yy + '-' + (mm < 10 ? '0' : '') + mm);
-    }
-    var cnt = months.map(function () { return 0; }), bud = months.map(function () { return 0; });
-    var outside = 0, noPub = 0;
-    ACTIVE.forEach(function (c) {
-      var dk = dayKey(c._pub);
-      if (!dk) { noPub++; return; }
-      var j = months.indexOf(dk.slice(0, 7));
-      if (j < 0) { outside++; return; }
-      cnt[j]++;
-      if (typeof c.budget === 'number') bud[j] += c.budget;
-    });
-    var labels = months.map(function (m) { return m.replace('-', '/'); });
-    return [
-      h('div', { class: 'panel-head' }, h('h2', null, '每月趨勢（依公告月份）'),
-        h('span', { class: 'note' }, '近 12 個月有效案件。' + (outside ? '另有 ' + outside + ' 件公告日在此範圍外。' : '') + (noPub ? '另有 ' + noPub + ' 件公告日未載。' : ''))),
-      h('h3', { class: 'sub-title' }, '新案件數'),
-      h('div', { class: 'chart' }, barChart(labels, cnt, function (v) { return String(v); }, 'c-bar', '每月新案件數')),
-      h('h3', { class: 'sub-title' }, '已公告預算合計（僅計已公告預算）'),
-      h('div', { class: 'chart' }, barChart(labels, bud, function (v) { return v ? moneyShort(v).replace('元', '') : '0'; }, 'c-bar2', '每月已公告預算合計'))
-    ];
   }
 
   function hbars(entries, emptyText) {

@@ -15,7 +15,6 @@
   --green-soft: #e5f5ec;
   --violet: #6b3fa0;
   --violet-soft: #f1eafa;
-  --heat-rgb: 31 95 191;
   --shadow: 0 1px 2px rgb(0 0 0 / .06);
   --radius: 8px;
   color-scheme: light;
@@ -38,7 +37,6 @@
     --green-soft: #173325;
     --violet: #c7a6f2;
     --violet-soft: #2d2340;
-    --heat-rgb: 127 176 255;
     --shadow: none;
     color-scheme: dark;
   }
@@ -46,7 +44,7 @@
 :root[data-theme="dark"] {
   --bg: #12151b; --panel: #1b2029; --panel-2: #232a35; --text: #e6e9ef; --muted: #9aa3b2; --line: #2f3744;
   --accent: #7fb0ff; --accent-soft: #1d2c46; --red: #ff8a80; --red-soft: #3d1f1d; --amber: #f3c35b; --amber-soft: #3a2f14;
-  --green: #6fd39b; --green-soft: #173325; --violet: #c7a6f2; --violet-soft: #2d2340; --heat-rgb: 127 176 255; --shadow: none;
+  --green: #6fd39b; --green-soft: #173325; --violet: #c7a6f2; --violet-soft: #2d2340; --shadow: none;
   color-scheme: dark;
 }
 
@@ -174,24 +172,7 @@ td.nowrap { white-space: nowrap; }
 
 /* charts */
 .charts-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-.charts-grid .wide { grid-column: 1 / -1; }
 .charts-grid .panel + .panel { margin-top: 0; }
-.heat-wrap { overflow-x: auto; }
-table.heat { border-collapse: separate; border-spacing: 3px; width: 100%; font-size: .85rem; }
-table.heat th { font-weight: 600; color: var(--muted); font-size: .8rem; padding: 4px; text-align: center; }
-table.heat th.ag { text-align: left; color: var(--text); min-width: 200px; overflow-wrap: anywhere; }
-table.heat td { text-align: center; padding: 6px 4px; border-radius: 4px; background: rgb(var(--heat-rgb) / var(--a, 0)); font-variant-numeric: tabular-nums; min-width: 64px; }
-table.heat td.zero { background: var(--panel-2); color: var(--muted); }
-table.heat td.dk { color: #fff; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) table.heat td.dk { color: #0d1420; } }
-:root[data-theme="dark"] table.heat td.dk { color: #0d1420; }
-table.heat td small { display: block; font-size: .7rem; opacity: .85; }
-.chart svg { width: 100%; height: auto; display: block; }
-.c-bar { fill: var(--accent); }
-.c-bar2 { fill: var(--green); }
-.c-axis { stroke: var(--line); }
-.c-label { fill: var(--muted); font-size: 11px; }
-.c-val { fill: var(--text); font-size: 11px; font-weight: 600; }
 .hbars { display: flex; flex-direction: column; gap: 6px; }
 .hbar { display: grid; grid-template-columns: minmax(0, 1fr) 140px 36px; gap: 8px; align-items: center; font-size: .85rem; }
 .hbar .name { overflow-wrap: anywhere; }
