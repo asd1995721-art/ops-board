@@ -74,7 +74,9 @@
   var fKey = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
   var fWd = new Intl.DateTimeFormat('zh-TW', { timeZone: TZ, weekday: 'short' });
   function dayKey(d) { return d ? fKey.format(d) : null; }
+  var fMD = new Intl.DateTimeFormat('zh-TW', { timeZone: TZ, month: 'numeric', day: 'numeric' });
   function fmtDate(d) { return d ? fDate.format(d) : null; }
+  function fmtMD(d) { return d ? fMD.format(d) : null; }
   function fmtDT(d) { return d ? fDT.format(d) : null; }
   function money(n) { return (typeof n === 'number' && isFinite(n)) ? n.toLocaleString('zh-TW') + ' 元' : null; }
   function moneyShort(n) {
@@ -174,7 +176,8 @@
     if (r.badge) badges.push(h('span', { class: 'badge ' + (r.cls === 'urgent' ? 'b-red' : 'b-amber') }, r.badge));
     (extra || []).forEach(function (b) { badges.push(b); });
     return h('button', { type: 'button', class: 'card ' + r.cls, onclick: function () { openCase(c); } },
-      h('div', { class: 'row1' }, h('span', { class: 'no' }, txt(c.case_no, '案號未載')), badges),
+      h('div', { class: 'row1' }, h('span', { class: 'no' }, txt(c.case_no, '案號未載')),
+        c._pub ? h('span', { class: 'pub' }, '公告 ' + fmtMD(c._pub)) : null, badges),
       h('div', { class: 'title' }, caseName(c), changeTags(c).map(function (b) { return [' ', b]; })),
       h('div', { class: 'agency' }, txt(c.agency, '機關未載')),
       h('div', { class: 'row3' }, h('span', null, moneyShort(c.budget)), h('span', { class: 'remain' }, r.text))
@@ -437,19 +440,38 @@
     var fMax = h('input', { type: 'number', min: '0', step: '1', inputmode: 'numeric', placeholder: '不限' });
     var fFail = sel('是否流標過', [['', '全部'], ['y', '是'], ['n', '否']]);
     var fReason = isExcl ? sel('排除原因', [['', '全部']].concat(Object.keys(EXCL).map(function (k) { return [k, EXCL[k]]; }))) : null;
+    var fSort = sel('排序', [['', '依截標日'], ['pub-desc', '公告日：新到舊'], ['pub-asc', '公告日：舊到新']]);
     var reset = h('button', { type: 'button', class: 'reset' }, '清除篩選');
 
     var filters = h('div', { class: 'filters' },
       h('label', { class: 'kw' }, '關鍵字', kw), fCat.wrap, fAg.wrap, fSt.wrap,
       h('label', null, '預算下限（萬元）', fMin), h('label', null, '預算上限（萬元）', fMax),
-      fReason ? fReason.wrap : fFail.wrap, fReason ? fFail.wrap : reset);
-    if (fReason) filters.append(reset);
+      fReason ? fReason.wrap : null, fFail.wrap, fSort.wrap, reset);
     var countLine = h('p', { class: 'count-line' });
     var tbody = h('tbody');
-    var cols = ['案號', '案名', '機關', '類別', '預算', '狀態', '截標日'];
+    var cols = ['案號', '案名', '機關', '公告日', '類別', '預算', '狀態', '截標日'];
     if (isExcl) cols.push('排除原因');
+    var pubTh = null;
     var table = h('table', { class: 'list' },
-      h('thead', null, h('tr', null, cols.map(function (c) { return h('th', { class: c === '預算' ? 'num' : null }, c); }))), tbody);
+      h('thead', null, h('tr', null, cols.map(function (c) {
+        if (c !== '公告日') return h('th', { class: c === '預算' ? 'num' : null }, c);
+        pubTh = h('th', { class: 'sortable nowrap', tabindex: '0', title: '點擊依公告日排序' }, c, h('span', { class: 'sort-ind' }));
+        return pubTh;
+      }))), tbody);
+    function pubCmp(dir) {
+      return function (a, b) {
+        if (a._pub && b._pub) return dir * (a._pub - b._pub) || poolSort(a, b);
+        if (a._pub) return -1;
+        if (b._pub) return 1;
+        return poolSort(a, b);
+      };
+    }
+    function cycleSort() {
+      fSort.el.value = fSort.el.value === 'pub-desc' ? 'pub-asc' : (fSort.el.value === 'pub-asc' ? '' : 'pub-desc');
+      apply();
+    }
+    pubTh.addEventListener('click', cycleSort);
+    pubTh.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cycleSort(); } });
     var more = h('div', { class: 'more' });
     box.append(h('div', { class: 'panel' }, filters, countLine, table, more));
 
@@ -475,14 +497,18 @@
           if (mx != null && c.budget > mx) return false;
         }
         return true;
-      }).sort(poolSort);
+      });
+      var so = fSort.el.value;
+      current.sort(so === 'pub-desc' ? pubCmp(-1) : (so === 'pub-asc' ? pubCmp(1) : poolSort));
+      pubTh.setAttribute('aria-sort', so === 'pub-desc' ? 'descending' : (so === 'pub-asc' ? 'ascending' : 'none'));
+      pubTh.lastChild.textContent = so === 'pub-desc' ? ' ▼' : (so === 'pub-asc' ? ' ▲' : ' ⇅');
       shown = PAGE;
       draw();
     }
     function draw() {
       var withBudget = current.filter(function (c) { return typeof c.budget === 'number'; });
       var sum = withBudget.reduce(function (a, c) { return a + c.budget; }, 0);
-      countLine.textContent = '共 ' + current.length + ' 筆　·　已公告預算 ' + withBudget.length + ' 筆，合計 ' + moneyShort(sum) + '（僅計已公告預算）　·　排序：未截止者由近到遠，其次已截止，無截止時間排最後';
+      countLine.textContent = '共 ' + current.length + ' 筆　·　已公告預算 ' + withBudget.length + ' 筆，合計 ' + moneyShort(sum) + '（僅計已公告預算）　·　排序：' + ({ 'pub-desc': '公告日由新到舊，無公告日排最後', 'pub-asc': '公告日由舊到新，無公告日排最後' }[fSort.el.value] || '未截止者由近到遠，其次已截止，無截止時間排最後');
       tbody.textContent = '';
       var frag = document.createDocumentFragment();
       current.slice(0, shown).forEach(function (c) {
@@ -493,6 +519,7 @@
           h('td', { 'data-label': '案號', class: 'mono nowrap' }, h('button', { type: 'button', class: 'linkbtn', onclick: function (e) { e.stopPropagation(); openCase(c); } }, txt(c.case_no, '案號未載'))),
           h('td', { 'data-label': '案名' }, caseName(c), changeTags(c).map(function (b) { return [' ', b]; }), c.failed_count > 0 ? [' ', h('span', { class: 'badge b-amber' }, '流標 ' + c.failed_count + ' 次')] : null),
           h('td', { 'data-label': '機關' }, txt(c.agency, '機關未載')),
+          h('td', { 'data-label': '公告日', class: 'nowrap' }, c._pub ? fmtDate(c._pub) : null),
           h('td', { 'data-label': '類別', class: 'nowrap' }, catLabel(c.category)),
           h('td', { 'data-label': '預算', class: 'num' }, money(c.budget) || '未公告'),
           h('td', { 'data-label': '狀態', class: 'nowrap' }, bucketLabel(c.bucket)),
@@ -509,11 +536,11 @@
     }
     var t;
     kw.addEventListener('input', function () { clearTimeout(t); t = setTimeout(apply, 150); });
-    [fCat.el, fAg.el, fSt.el, fFail.el, fReason && fReason.el].forEach(function (el) { if (el) el.addEventListener('change', apply); });
+    [fCat.el, fAg.el, fSt.el, fFail.el, fSort.el, fReason && fReason.el].forEach(function (el) { if (el) el.addEventListener('change', apply); });
     [fMin, fMax].forEach(function (el) { el.addEventListener('input', function () { clearTimeout(t); t = setTimeout(apply, 250); }); });
     reset.addEventListener('click', function () {
       kw.value = ''; fMin.value = ''; fMax.value = '';
-      [fCat.el, fAg.el, fSt.el, fFail.el, fReason && fReason.el].forEach(function (el) { if (el) el.value = ''; });
+      [fCat.el, fAg.el, fSt.el, fFail.el, fSort.el, fReason && fReason.el].forEach(function (el) { if (el) el.value = ''; });
       apply();
     });
     apply();
