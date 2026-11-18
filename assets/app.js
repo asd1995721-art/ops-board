@@ -221,9 +221,13 @@
     }
     var nRed = bad.filter(function (x) { return x.level === 'red'; }).length, nYel = bad.length - nRed;
     function num(v) { return (typeof v === 'number' && isFinite(v)) ? v.toLocaleString('zh-TW') : '—'; }
-    return h('div', { class: 'health ' + (nRed ? 'is-red' : 'is-yellow'), role: 'alert' },
-      h('div', { class: 'panel-head' },
-        h('h2', null, '⚠ 查詢入口異常：失敗 ' + nRed + ' 個、偏少 ' + nYel + ' 個'), buildNote),
+    return h('details', { class: 'health ' + (nRed ? 'is-red' : 'is-yellow') },
+      h('summary', null,
+        h('span', { class: 'health-title' }, '⚠ 查詢入口異常'),
+        nRed ? h('span', { class: 'badge b-red' }, '失敗 ' + nRed) : null,
+        nYel ? h('span', { class: 'badge b-amber' }, '偏少 ' + nYel) : null,
+        h('span', { class: 'note health-more' }, '展開明細')),
+      buildNote ? h('p', { class: 'health-build' }, buildNote) : null,
       h('table', { class: 'list health-table' },
         h('thead', null, h('tr', null, h('th', null, '狀態'), h('th', null, '來源'), h('th', null, '輪次'),
           h('th', { class: 'num' }, '今日筆數'), h('th', { class: 'num' }, '平常筆數'), h('th', null, '原因'))),
