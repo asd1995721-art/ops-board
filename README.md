@@ -21,6 +21,7 @@
 
 - **只更新 `data/dashboard-data.json` 這一個檔**。本儲存庫是公開的，工作區的其他檔案一律不得放入。
 - 資料檔須維持 `schema_version` 1 的欄位格式；欄位變動時需同步修改 `assets/app.js`。
+- 修改 `assets/app.js` 或 `assets/style.css` 時，同步更新 `index.html` 裡兩個 `?v=` 版本號，避免手機沿用快取的舊檔。
 - 使用者需先在 Codex 對話中確認本儲存庫的位置，Codex 才執行上述更新。
 
 ## 本機預覽
