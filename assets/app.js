@@ -85,10 +85,27 @@
     if (n >= 1e4) return Math.round(n / 1e4).toLocaleString('zh-TW') + ' 萬元';
     return n.toLocaleString('zh-TW') + ' 元';
   }
+  // 空值狀態：依 budget_status／deadline_status 顯示「未公告」或「未取得」；欄位缺少或代碼不明時保守顯示「未取得」
+  var ST_NONE = ['not_published', 'not_announced', 'unpublished', 'not_disclosed', 'not_listed', 'none', 'absent', 'official_none', '未公告'];
+  function statusText(st) {
+    if (typeof st !== 'string' || !st) return '未取得';
+    var k = st.trim().toLowerCase();
+    if (ST_NONE.indexOf(k) >= 0 || st.indexOf('未公告') >= 0) return '未公告';
+    return '未取得';
+  }
+  function budgetEmpty(c) { return statusText(c.budget_status); }
+  function deadlineEmpty(c) { return statusText(c.deadline_status); }
+  function budgetShort(c) {
+    var n = c.budget;
+    if (typeof n !== 'number' || !isFinite(n)) return '預算' + budgetEmpty(c);
+    if (n >= 1e8) return '預算 ' + (n / 1e8).toFixed(2) + ' 億';
+    if (n >= 1e4) return '預算 ' + Math.round(n / 1e4).toLocaleString('zh-TW') + ' 萬';
+    return '預算 ' + n.toLocaleString('zh-TW') + ' 元';
+  }
   function txt(v, fb) { return (v == null || v === '') ? fb : String(v); }
   function caseName(c) { return txt(c.title, '（案名未載）'); }
   function remainInfo(c) {
-    if (!c._dl) return { text: '無截止資料', cls: '' };
+    if (!c._dl) return { text: '截止' + deadlineEmpty(c), cls: '' };
     var ms = c._dl - NOW;
     if (ms <= 0) return { text: '已截止', cls: '' };
     var hours = Math.floor(ms / H), days = Math.floor(ms / D);
@@ -180,7 +197,7 @@
         c._pub ? h('span', { class: 'pub' }, '公告 ' + fmtMD(c._pub)) : null, badges),
       h('div', { class: 'title' }, caseName(c), changeTags(c).map(function (b) { return [' ', b]; })),
       h('div', { class: 'agency' }, txt(c.agency, '機關未載')),
-      h('div', { class: 'row3' }, h('span', null, moneyShort(c.budget)), h('span', { class: 'remain' }, r.text))
+      h('div', { class: 'row3' }, h('span', null, budgetShort(c)), h('span', { class: 'remain' }, r.text))
     );
   }
   function cardList(list, extraFn, emptyText) {
@@ -514,14 +531,14 @@
       current.slice(0, shown).forEach(function (c) {
         var r = remainInfo(c);
         var dlCell = c._dl ? [fmtDT(c._dl), c.deadline_time_default ? h('div', null, h('span', { class: 'badge b-gray' }, '預設17:00')) : null,
-          r.badge && isOpenNow(c) ? h('div', null, h('span', { class: 'badge ' + (r.cls === 'urgent' ? 'b-red' : 'b-amber') }, r.badge)) : null] : '無截止資料';
+          r.badge && isOpenNow(c) ? h('div', null, h('span', { class: 'badge ' + (r.cls === 'urgent' ? 'b-red' : 'b-amber') }, r.badge)) : null] : h('span', { class: 'dim' }, deadlineEmpty(c));
         var tr = h('tr', { onclick: function () { openCase(c); } },
           h('td', { 'data-label': '案號', class: 'mono nowrap' }, h('button', { type: 'button', class: 'linkbtn', onclick: function (e) { e.stopPropagation(); openCase(c); } }, txt(c.case_no, '案號未載'))),
           h('td', { 'data-label': '案名' }, caseName(c), changeTags(c).map(function (b) { return [' ', b]; }), c.failed_count > 0 ? [' ', h('span', { class: 'badge b-amber' }, '流標 ' + c.failed_count + ' 次')] : null),
           h('td', { 'data-label': '機關' }, txt(c.agency, '機關未載')),
           h('td', { 'data-label': '公告日', class: 'nowrap' }, c._pub ? fmtDate(c._pub) : null),
           h('td', { 'data-label': '類別', class: 'nowrap' }, catLabel(c.category)),
-          h('td', { 'data-label': '預算', class: 'num' }, money(c.budget) || '未公告'),
+          h('td', { 'data-label': '預算', class: 'num' }, money(c.budget) || h('span', { class: 'dim' }, budgetEmpty(c))),
           h('td', { 'data-label': '狀態', class: 'nowrap' }, bucketLabel(c.bucket)),
           h('td', { 'data-label': '截標日', class: 'nowrap' }, dlCell),
           isExcl ? h('td', { 'data-label': '排除原因' }, c.exclude_reason ? (EXCL[c.exclude_reason] || c.exclude_reason) : '原因未載') : null);
@@ -639,12 +656,12 @@
     var none = function (t) { return h('span', { class: 'dim' }, t); };
 
     var dl = c._dl ? [fmtDT(c._dl), c.deadline_time_default ? [' ', h('span', { class: 'badge b-gray' }, '預設17:00')] : null,
-      isOpenNow(c) ? [' ', h('span', { class: 'dim' }, '（' + remainInfo(c).text + '）')] : null] : none('無截止資料');
+      isOpenNow(c) ? [' ', h('span', { class: 'dim' }, '（' + remainInfo(c).text + '）')] : null] : none(deadlineEmpty(c));
 
     var sec = [];
     sec.push(h('section', null, h('h3', null, '基本'), h('dl', { class: 'kv' },
       kv('機關', txt(c.agency, '機關未載'), vtag(c, 'agency')),
-      kv('預算', money(c.budget) || none('未公告'), vtag(c, 'budget')),
+      kv('預算', money(c.budget) || none(budgetEmpty(c)), vtag(c, 'budget')),
       kv('公告日', fmtDate(c._pub) || none('公告日未載'), vtag(c, 'published_at')),
       kv('截標', dl, vtag(c, 'deadline')),
       kv('開標', fmtDT(c._open) || none('未載'), vtag(c, 'opening_at')),
