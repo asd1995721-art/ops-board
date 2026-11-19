@@ -32,6 +32,11 @@
     result_kind: '結果類型', result_text: '結果說明', failed_count: '流標次數', retender: '續招', source_url: '來源連結'
   };
   var HEALTH = { red: ['失敗', 'b-red'], yellow: ['偏少', 'b-amber'] };
+  var LEVEL_TEXT = { ok: '正常', building: '建立基準中', red: '失敗', yellow: '偏少' };
+  var OPEN_DATA = [
+    { label: '公開徵求', re: /公開徵求\s*XML/i, url: 'https://data.gov.tw/dataset/7261' },
+    { label: '公開閱覽', re: /公開閱覽\s*XML/i, url: 'https://data.gov.tw/dataset/7260' }
+  ];
   var H = 3600 * 1000, D = 24 * H;
 
   var DATA = null, ALL = [], ACTIVE = [], EXCLUDED = [], NOW = new Date();
@@ -234,10 +239,22 @@
     var bad = list.filter(function (x) { return x.level === 'red' || x.level === 'yellow'; })
       .sort(function (a, b) { return (a.level === 'red' ? 0 : 1) - (b.level === 'red' ? 0 : 1); });
     var building = list.filter(function (x) { return x.level === 'building'; }).length;
-    var buildNote = building ? h('span', { class: 'note' }, '　另有 ' + building + ' 個入口建立基準中') : null;
+    var unknown = list.filter(function (x) { return !LEVEL_TEXT[x.level]; }).length;
+    var extra = [];
+    if (building) extra.push('另有 ' + building + ' 個入口建立基準中');
+    if (unknown) extra.push(unknown + ' 個入口狀態未知');
+    var buildNote = extra.length ? h('span', { class: 'note' }, '　' + extra.join('，')) : null;
+    // 開放資料核對：source_health 中的「公開徵求 XML」「公開閱覽 XML」
+    var odItems = OPEN_DATA.map(function (o) {
+      var x = list.filter(function (s) { return typeof s.source === 'string' && o.re.test(s.source); })[0];
+      return x ? [h('a', { href: o.url, target: '_blank', rel: 'noopener noreferrer' }, o.label), ' ' + (LEVEL_TEXT[x.level] || '狀態未知')] : null;
+    }).filter(Boolean);
+    var odNote = odItems.length ? h('span', { class: 'note od-note' }, '開放資料核對：',
+      odItems.map(function (it, i) { return i ? ['、', it] : it; })) : null;
     if (!bad.length) {
       if (!list.length) return null;
-      return h('p', { class: 'health-ok' }, h('span', { class: 'badge b-green' }, '正常'), ' 各查詢入口正常', buildNote);
+      return h('p', { class: 'health-ok' }, h('span', { class: 'badge b-green' }, '正常'), ' 各查詢入口正常', buildNote,
+        odNote ? ['　', odNote] : null);
     }
     var nRed = bad.filter(function (x) { return x.level === 'red'; }).length, nYel = bad.length - nRed;
     function num(v) { return (typeof v === 'number' && isFinite(v)) ? v.toLocaleString('zh-TW') : '—'; }
@@ -247,7 +264,7 @@
         nRed ? h('span', { class: 'badge b-red' }, '失敗 ' + nRed) : null,
         nYel ? h('span', { class: 'badge b-amber' }, '偏少 ' + nYel) : null,
         h('span', { class: 'note health-more' }, '展開明細')),
-      buildNote ? h('p', { class: 'health-build' }, buildNote) : null,
+      buildNote || odNote ? h('p', { class: 'health-build' }, buildNote, odNote ? [buildNote ? '　' : null, odNote] : null) : null,
       h('table', { class: 'list health-table' },
         h('thead', null, h('tr', null, h('th', null, '狀態'), h('th', null, '來源'), h('th', null, '輪次'),
           h('th', { class: 'num' }, '今日筆數'), h('th', { class: 'num' }, '平常筆數'), h('th', null, '原因'))),
@@ -255,7 +272,10 @@
           var m = HEALTH[x.level];
           return h('tr', null,
             h('td', { 'data-label': '狀態', class: 'nowrap' }, h('span', { class: 'badge ' + m[1] }, m[0])),
-            h('td', { 'data-label': '來源' }, txt(x.source, '來源未載')),
+            h('td', { 'data-label': '來源' }, (function () {
+              var o = OPEN_DATA.filter(function (d) { return typeof x.source === 'string' && d.re.test(x.source); })[0];
+              return o ? h('a', { href: o.url, target: '_blank', rel: 'noopener noreferrer' }, x.source) : txt(x.source, '來源未載');
+            })()),
             h('td', { 'data-label': '輪次', class: 'nowrap' }, txt(x.round, '—')),
             h('td', { 'data-label': '今日筆數', class: 'num' }, num(x.today)),
             h('td', { 'data-label': '平常筆數', class: 'num' }, num(x.baseline)),
